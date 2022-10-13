@@ -1,0 +1,73 @@
+--- /usr/local/opnsense/mvc/app/library/OPNsense/Auth/TOTP.php.orig	2021-03-13 11:06:14.889837000 +0100
++++ /usr/local/opnsense/mvc/app/library/OPNsense/Auth/TOTP.php	2021-03-13 11:07:14.336776000 +0100
+@@ -57,6 +57,11 @@
+     private $passwordFirst = false;
+ 
+     /**
++     * @var bool ignore password
++     */
++    private $passwordIgnore = false;
++
++    /**
+      * use graceperiod and timeWindow to calculate which moments in time we should check
+      * @return array timestamps
+      */
+@@ -144,7 +149,7 @@
+     {
+         $userObject = $this->getUser($username);
+         if ($userObject != null && !empty($userObject->otp_seed)) {
+-            if (strlen($password) > $this->otpLength) {
++            if (strlen($password) >= $this->otpLength) {
+                 // split otp token code and userpassword
+                 $pwLength = strlen($password) - $this->otpLength;
+                 $pwStart = $this->otpLength;
+@@ -158,7 +163,7 @@
+                 $otp_seed = \Base32\Base32::decode($userObject->otp_seed);
+                 if ($this->authTOTP($otp_seed, $code)) {
+                     // token valid, do parents auth
+-                    return parent::authenticate($username, $userPassword);
++                    return ($this->passwordIgnore)? true : parent::authenticate($username, $userPassword);
+                 }
+             }
+         }
+@@ -173,14 +178,14 @@
+      */
+     public function shouldChangePassword($username, $password = null)
+     {
+-        if ($password != null && strlen($password) > $this->otpLength) {
++        if ($password != null && strlen($password) >= $this->otpLength) {
+             /* deconstruct password according to settings */
+             $pwLength = strlen($password) - $this->otpLength;
+             $pwStart = $this->passwordFirst ? 0 : $this->otpLength;
+             $password = substr($password, $pwStart, $pwLength);
+         }
+ 
+-        return parent::shouldChangePassword($username, $password);
++        return ($this->passwordIgnore)? false : parent::shouldChangePassword($username, $password);
+     }
+ 
+     /**
+@@ -201,6 +206,9 @@
+         if (!empty($config['passwordFirst'])) {
+             $this->passwordFirst = true;
+         }
++        if (!empty($config['passwordIgnore'])) {
++            $this->passwordIgnore = true;
++        }
+     }
+ 
+     /**
+@@ -256,6 +264,13 @@
+         $fields["passwordFirst"]["help"] = gettext("Checking this box requires the token after the password. Default requires the token before the password.");
+         $fields["passwordFirst"]["type"] = "checkbox";
+         $fields["passwordFirst"]["validate"] = function ($value) {
++            return array();
++        };
++        $fields["passwordIgnore"] = array();
++        $fields["passwordIgnore"]["name"] = gettext("Ignore Password");
++        $fields["passwordIgnore"]["help"] = gettext("Ignore password, trust in TOTP.");
++        $fields["passwordIgnore"]["type"] = "checkbox";
++        $fields["passwordIgnore"]["validate"] = function ($value) {
+             return array();
+         };
+ 
